@@ -203,8 +203,8 @@ async def get_pic(url):
 @app.route("/", methods=['GET', 'POST'])
 async def get_data():
     if request.method == 'GET':
-        # typ = request.args.get("type")
-        # print(typ)
+        typ = request.args.get("type")
+        print(typ)
         url = await pixiv_api.random()
         data = await get_pic(url)
         return json.dumps(data)
