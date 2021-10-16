@@ -1,12 +1,14 @@
+from os import kill
 from flask import Flask
 from flask import request
-from pixivpy_async import AppPixivAPI
+from pixivpy_async import AppPixivAPI, PixivAPI
 from datetime import timedelta, datetime
 import requests
 import json
 import random
 import re
 import aiohttp
+import asyncio
 import base64
 header = {
   'Referer': 'https://www.pixiv.net',
@@ -19,12 +21,17 @@ app = Flask(__name__)
 #token自己搞
 _TOKEN = "o-"
 
+# windows系统 去掉注释
+# policy = asyncio.WindowsSelectorEventLoopPolicy()
+# asyncio.set_event_loop_policy(policy)
+
 class pixiv:
     def __init__(self):
-        self.aapi =  AppPixivAPI(proxy="http://127.0.0.1:1080")
+        self.aapi = AppPixivAPI()
+        self.papi = PixivAPI()
         self.today = ''
         self.pic_id = []
-
+        proxy="http://127.0.0.1:1080"
         self.pic_user_id = []
         self.pic_user_works = []
         self.pic_user_name = []
@@ -49,6 +56,7 @@ class pixiv:
     #登录
     async def login(self): 
         await self.aapi.login(refresh_token=_TOKEN)
+        await self.papi.login(refresh_token=_TOKEN)
 
     #获取日期
     def date(self):
@@ -59,7 +67,7 @@ class pixiv:
     #搜索tag
     async def search(self, tag, t):
         await self.login()
-        result = await self.aapi.search_illust(tag, search_target='exact_match_for_tags')
+        result = await self.aapi.search_illust(tag, search_target='title_and_caption')
         pic = []
         author = []
         pic_fin = []
@@ -67,7 +75,6 @@ class pixiv:
         for i in result.illusts:
             pic.append(self.large_to_original(i['image_urls']['large']))
             author.append(i['user']['name'])
-        print(pic)
         try:
             pic_fin.append(pic[t])
             author_fin.append(author[t])
@@ -118,14 +125,14 @@ class pixiv:
         return pic_fin, author_fin, len(self.pic_user_works)
 
     #随机日榜
-    async def random(self, typ='day', t=1):
+    async def random(self, typ='day', num=1):
         pic = []
         author = []
         pic_fin = []
         author_fin = []
         k = 0
         if self.pic_today[typ] and self.today == self.date():
-            while k < t:
+            while k < num:
                 i = random.randint(0,len(self.pic_today[typ])-1)
                 url = self.check_url(self.pic_today[typ][i])
                 if url not in pic_fin:
@@ -163,7 +170,7 @@ class pixiv:
             print(len(pic))
             self.pic_today[typ] = pic
             self.author_today[typ] = author
-            while k < t:
+            while k < num:
                 i = random.randint(0,len(self.pic_today[typ])-1)
                 url = self.check_url(self.pic_today[typ][i])
                 if url not in pic_fin:
@@ -175,13 +182,13 @@ class pixiv:
 
 pixiv_api = pixiv()
 
-#获取图片
+
 async def func(session, url):
   fin = bytes()
   print(url)
   proxy = 'http://127.0.0.1:1080'
   #分块存入数据
-  async with session.get(url, verify_ssl=False, proxy=proxy) as res:
+  async with session.get(url, verify_ssl=False) as res:
     print('res ok')
     while True:
       data = await res.content.read(1048576)
@@ -203,11 +210,36 @@ async def get_pic(url):
 @app.route("/", methods=['GET', 'POST'])
 async def get_data():
     if request.method == 'GET':
-        typ = request.args.get("type")
-        print(typ)
-        url = await pixiv_api.random()
-        data = await get_pic(url)
-        return json.dumps(data)
-    else:
-        data = await pixiv_api.random(request.form['times'], 'day')
-        return json.dumps(data)
+        data = []
+        num = 1
+        if request.args.get("type"):
+            if request.args.get("type") == 'rank':
+                typ = 'day'
+                if request.args.get("rank_type"):
+                    typ = request.args.get("type")
+                if request.args.get("num"):
+                    num = int(request.args.get("num"))
+                url, author = await pixiv_api.random(typ, num)
+                for t, i in enumerate(url):
+                    i = "".join(i)
+                    pic = await get_pic(i)
+                    data.append(author[t])
+                    data.append(pic)
+                return json.dumps(data)
+            if request.args.get("type") == 'search':
+                tag = request.args.get("tag")
+                if request.args.get("num"):
+                    num = int(request.args.get("num"))
+                url, author = await pixiv_api.search(tag, num)
+                url = "".join(url)
+                pic = await get_pic(url)
+                data.append(author)
+                data.append(pic)
+                return json.dumps(data)
+        else:
+            url, author = await pixiv_api.random()
+            url = "".join(url)
+            pic = await get_pic(url)
+            data.append(author)
+            data.append(pic)
+            return json.dumps(data)
