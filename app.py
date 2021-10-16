@@ -19,7 +19,7 @@ header = {
 app = Flask(__name__)
 
 #token自己搞
-_TOKEN = "o-"
+_TOKEN = "o-HYGiZqb_azny7RSwX7y2uy0Z0JVOu6WHUD9He9Vgk"
 
 # windows系统 去掉注释
 # policy = asyncio.WindowsSelectorEventLoopPolicy()
@@ -27,16 +27,14 @@ _TOKEN = "o-"
 
 class pixiv:
     def __init__(self):
-        self.aapi = AppPixivAPI()
-        self.papi = PixivAPI()
+        self.aapi = AppPixivAPI(proxy="http://127.0.0.1:1080")
         self.today = ''
         self.pic_id = []
-        proxy="http://127.0.0.1:1080"
         self.pic_user_id = []
         self.pic_user_works = []
         self.pic_user_name = []
-        self.pic_today = {"day":[], "day_r18":[]}
-        self.author_today = {"day":[], "day_r18":[]}
+        self.pic_today = {"day":[], "week":[], "month":[], "day_male":[], "day_female":[], "week_original":[], "week_rookie":[], "day_r18":[], "day_male_r18":[], "day_female_r18":[], "week_r18":[], "week_r18g":[], "day_manga":[], "week_manga":[], "month_manga":[], "week_rookie_manga":[], "day_r18_manga":[], "week_r18_manga":[], "week_r18g_manga":[]}
+        self.author_today = {"day":[], "week":[], "month":[], "day_male":[], "day_female":[], "week_original":[], "week_rookie":[], "day_r18":[], "day_male_r18":[], "day_female_r18":[], "week_r18":[], "week_r18g":[], "day_manga":[], "week_manga":[], "month_manga":[], "week_rookie_manga":[], "day_r18_manga":[], "week_r18_manga":[], "week_r18g_manga":[]}
     
     #检查地址是否有效
     def check_url(self, url):
@@ -56,7 +54,6 @@ class pixiv:
     #登录
     async def login(self): 
         await self.aapi.login(refresh_token=_TOKEN)
-        await self.papi.login(refresh_token=_TOKEN)
 
     #获取日期
     def date(self):
@@ -65,9 +62,15 @@ class pixiv:
         return yesterday_format
     
     #搜索tag
-    async def search(self, tag, t):
+    async def search(self, tag, search_type, t):
+        if search_type == 1:
+            search_target = 'partial_match_for_tags'
+        if search_type == 2:
+            search_target = 'exact_match_for_tags'
+        if search_type == 3:
+            search_target = 'title_and_caption'
         await self.login()
-        result = await self.aapi.search_illust(tag, search_target='title_and_caption')
+        result = await self.aapi.search_illust(tag, search_target)
         pic = []
         author = []
         pic_fin = []
@@ -188,7 +191,7 @@ async def func(session, url):
   print(url)
   proxy = 'http://127.0.0.1:1080'
   #分块存入数据
-  async with session.get(url, verify_ssl=False) as res:
+  async with session.get(url, verify_ssl=False, proxy=proxy) as res:
     print('res ok')
     while True:
       data = await res.content.read(1048576)
@@ -207,6 +210,41 @@ async def get_pic(url):
     
 
 
+"""
+type    指定类型（有rank和search）
+num     指定数量
+
+type=rank
+    rank_type   指定排行榜类型
+    | 'day'
+    | 'week'
+    | 'month'
+    | 'day_male'
+    | 'day_female'
+    | 'week_original'
+    | 'week_rookie'
+    | 'day_r18'
+    | 'day_male_r18'
+    | 'day_female_r18'
+    | 'week_r18'
+    | 'week_r18g'
+    | 'day_manga'
+    | 'week_manga'
+    | 'month_manga'
+    | 'week_rookie_manga'
+    | 'day_r18_manga'
+    | 'week_r18_manga'
+    | 'week_r18g_manga'
+
+type=search
+    tag         指定标签
+    search_type 搜索类型（默认是3）
+    | 1='partial_match_for_tags'
+    | 2='exact_match_for_tags'
+    | 3='title_and_caption'
+
+"""
+
 @app.route("/", methods=['GET', 'POST'])
 async def get_data():
     if request.method == 'GET':
@@ -216,7 +254,7 @@ async def get_data():
             if request.args.get("type") == 'rank':
                 typ = 'day'
                 if request.args.get("rank_type"):
-                    typ = request.args.get("type")
+                    typ = request.args.get("rank_type")
                 if request.args.get("num"):
                     num = int(request.args.get("num"))
                 url, author = await pixiv_api.random(typ, num)
@@ -227,14 +265,19 @@ async def get_data():
                     data.append(pic)
                 return json.dumps(data)
             if request.args.get("type") == 'search':
+                search_type = 1
                 tag = request.args.get("tag")
                 if request.args.get("num"):
                     num = int(request.args.get("num"))
-                url, author = await pixiv_api.search(tag, num)
-                url = "".join(url)
-                pic = await get_pic(url)
-                data.append(author)
-                data.append(pic)
+                if request.args.get("search_type"):
+                    search_type = int(request.args.get("search_type"))
+                url, author = await pixiv_api.search(tag, search_type, num)
+                for t, i in enumerate(url):
+                    i = pixiv_api.check_url(i)
+                    i = "".join(i)
+                    pic = await get_pic(i)
+                    data.append(author[t])
+                    data.append(pic)
                 return json.dumps(data)
         else:
             url, author = await pixiv_api.random()
