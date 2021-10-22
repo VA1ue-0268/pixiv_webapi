@@ -75,10 +75,14 @@ class pixiv:
         author = []
         pic_fin = []
         author_fin = []
+        total = 0
         for i in result.illusts:
             pic.append(self.large_to_original(i['image_urls']['large']))
             author.append(i['user']['name'])
+            total += 1
         try:
+            if t == -1:
+                t = random.randint(1,total-1)
             pic_fin.append(pic[t])
             author_fin.append(author[t])
         except:
@@ -269,6 +273,8 @@ async def get_data():
                 tag = request.args.get("tag")
                 if request.args.get("num"):
                     num = int(request.args.get("num"))
+                else:
+                    num = -1
                 if request.args.get("search_type"):
                     search_type = int(request.args.get("search_type"))
                 url, author = await pixiv_api.search(tag, search_type, num)
